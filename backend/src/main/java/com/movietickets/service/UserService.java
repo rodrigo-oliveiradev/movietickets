@@ -7,11 +7,12 @@ import com.movietickets.exception.EmailAlreadyExistsException;
 import com.movietickets.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 public class UserService {
-
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -21,27 +22,42 @@ public class UserService {
     }
 
     public UserResponse create(CreateUserRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+        boolean emailJaExiste = userRepository.existsByEmail(request.email());
+
+        if (emailJaExiste) {
             throw new EmailAlreadyExistsException(request.email());
         }
 
-        var user = new User(
-            request.name(),
-            request.email(),
-            passwordEncoder.encode(request.password())
+        String senhaCriptografada = passwordEncoder.encode(request.password());
+
+        User user = new User(request.name(), request.email(), senhaCriptografada);
+
+        User savedUser = userRepository.save(user);
+
+        UserResponse response = new UserResponse(
+                savedUser.getId(),
+                savedUser.getName(),
+                savedUser.getEmail()
         );
 
-        var saved = userRepository.save(user);
-        return toResponse(saved);
+        return response;
     }
 
     public UserResponse findById(UUID id) {
-        return userRepository.findById(id)
-            .map(this::toResponse)
-            .orElseThrow(() -> new RuntimeException("User not found"));
-    }
+        Optional<User> optionalUser = userRepository.findById(id);
 
-    private UserResponse toResponse(User user) {
-        return new UserResponse(user.getId(), user.getName(), user.getEmail());
+        if (optionalUser.isEmpty()) {
+            throw new RuntimeException("User not found: " + id);
+        }
+
+        User user = optionalUser.get();
+
+        UserResponse response = new UserResponse(
+                user.getId(),
+                user.getName(),
+                user.getEmail()
+        );
+
+        return response;
     }
 }
